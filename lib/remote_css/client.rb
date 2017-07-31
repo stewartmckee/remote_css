@@ -19,21 +19,22 @@ module RemoteCss
       inline_styles = doc.css("style").map{|s| styles << {:source => :inline, :style => s.text.strip} }
       threads = []
       remote_styles = doc.css("link[rel='stylesheet'][href]").each do |c|
-        verbose("Loading #{c.attr("href")}")
+        url = URI.join(@options[:url], c.attr("href")).to_s
+        if url[0..1] == "//"
+          url = "http:#{url}"
+        end
+        verbose("Loading #{url}")
         threads << Thread.new do
-          url = URI.join(@options[:url], c.attr("href"))
-          if url[0..1] == "//"
-            url = "http:#{url}"
-          end
           styles << {:source => url, :style => open(url).read.strip}
         end
       end
 
       threads.each { |thr| thr.join }
-
+      verbose "Loaded all styles, generating string"
       style = styles.map{|s| "/* #{s[:source]} */\n\n#{s[:style]}" }.join("\n\n")
 
       if @options[:minify]
+        verbose "Minifying"
         CSSminify.compress(style)
       else
         style
