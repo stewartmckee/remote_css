@@ -4,21 +4,46 @@ module RemoteCss
 
     attr_accessor :url
 
-    def initialize(options)
+    def initialize(options={})
       validate_options!(options)
-      @url = options[:url]
+      @options = options
+      @options[:minify] = true unless @options.has_key?(:minify)
+      @options[:verbose] = false unless @options.has_key?(:verbose)
     end
 
     def css
-      doc = Nokogiri::HTML(open(@url))
-      inline_styles = doc.css("style").map{|s| s.text }
-      remote_styles = doc.css("link[rel='stylesheet'][href]").map{|c| open(URI.join(@url, c.attr("href"))).read }
-      [inline_styles, remote_styles].join("\n")
+      verbose("Reading HTML")
+      doc = Nokogiri::HTML(@options[:body] || open(@options[:url]))
+      verbose("Reading inline styles")
+      styles = []
+      inline_styles = doc.css("style").map{|s| styles << {:source => :inline, :style => s.text.strip} }
+      threads = []
+      remote_styles = doc.css("link[rel='stylesheet'][href]").each do |c|
+        verbose("Loading #{c.attr("href")}")
+        threads << Thread.new do
+          styles << {:source => URI.join(@options[:url], c.attr("href")), :style => open(URI.join(@options[:url], c.attr("href"))).read.strip}
+        end
+      end
+
+      threads.each { |thr| thr.join }
+
+      style = styles.map{|s| "/* #{s[:source]} */\n\n#{s[:style]}" }.join("\n\n")
+
+      if @options[:minify]
+        CSSminify.compress(style)
+      else
+        style
+      end
+
     end
 
     private
     def validate_options!(options)
-      raise ":url is required" unless options.has_key?(:url)
+      raise ":url or :body is required" unless options.has_key?(:url) || options.has_key?(:body)
+    end
+
+    def verbose(text)
+      puts text if @options[:verbose]
     end
   end
 end
