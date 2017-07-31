@@ -21,7 +21,11 @@ module RemoteCss
       remote_styles = doc.css("link[rel='stylesheet'][href]").each do |c|
         verbose("Loading #{c.attr("href")}")
         threads << Thread.new do
-          styles << {:source => URI.join(@options[:url], c.attr("href")), :style => open(URI.join(@options[:url], c.attr("href"))).read.strip}
+          url = URI.join(@options[:url], c.attr("href"))
+          if url[0..1] == "//"
+            url = "http:#{url}"
+          end
+          styles << {:source => url, :style => open(url).read.strip}
         end
       end
 
